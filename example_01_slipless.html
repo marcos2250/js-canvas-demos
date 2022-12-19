@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"/>
+<title>Car Parking Simulator</title>
+<style>
+html, body { padding: 0px; margin: 0px; width: 100%; height: 100%; overflow: hidden;}
+canvas { width:100%; height:100%; border:1px solid black; }
+</style> 
+</head>
+<body onload="start()"> 
+<canvas id="canvas"/>
+<script>
+var canvas = document.getElementById('canvas');
+canvas.height = window.innerHeight;
+canvas.width = window.innerWidth;
+var ctx = canvas.getContext('2d');
+var halfpi = 3.14159/2;
+var scale = 30;//pixels/meter
+var fps = 20;//50ms frames
+var halfWidth = window.innerWidth/2;
+var halfHeight = window.innerHeight/2;
+
+const car = {
+   x: 0,
+   y: 0,
+   a: 0,
+   vx: 0,
+   vy: 0,
+   va: 0,
+   steer: 0,
+   throttle: 0,
+   halfwheelbase: 1.4,
+   speed: 0
+};
+
+car.x = window.innerWidth / scale / 4;
+car.y = window.innerHeight / scale / 2;
+
+document.addEventListener('keydown', function(event) {
+  if (event.keyCode == 38) {
+    car.throttle = 1;
+  } else if (event.keyCode == 40) {
+    car.throttle = -1;
+  } else if (event.keyCode == 37) {
+    car.steer = -0.5;
+  } else if (event.keyCode == 39) {
+    car.steer = 0.5;
+  }
+});
+
+document.addEventListener('keyup', function(event) {
+  if (event.keyCode == 38) {
+    car.throttle = 0;
+  } else if (event.keyCode == 40) {
+    car.throttle = 0;
+  } else if (event.keyCode == 37) {
+    car.steer = 0;
+  } else if (event.keyCode == 39) {
+    car.steer = 0;
+  }
+});
+
+function drawLine(x,y,a,b) {
+ ctx.beginPath();
+ ctx.moveTo(x*scale,y*scale);
+ ctx.lineTo(a*scale,b*scale);
+ ctx.stroke();
+}
+
+function drawRect(x,y,a,l,w) {
+ var s = Math.sin(a);
+ var c = Math.cos(a);
+ var cay = w*s + l*c;
+ var cax = w*c - l*s;
+ var cby = w*s - l*c;
+ var cbx = w*c + l*s;
+ ctx.beginPath();
+ ctx.moveTo((x+cax)*scale, (y+cay)*scale);
+ ctx.lineTo((x+cbx)*scale, (y+cby)*scale);
+ ctx.lineTo((x-cax)*scale, (y-cay)*scale);
+ ctx.lineTo((x-cbx)*scale, (y-cby)*scale);
+ ctx.lineTo((x+cax)*scale, (y+cay)*scale);
+ ctx.stroke();
+}
+
+function update() {
+ ctx.clearRect(0, 0, canvas.width, canvas.height);
+ physics();
+ render();
+}
+
+
+function physics() {
+ var dir = car.a;
+ var sn0 = Math.sin(dir);
+ var cs0 = Math.cos(dir);
+ var turnRadius;
+
+ //add thrust/frames per sec
+ car.speed += car.throttle/fps;
+
+ //calculate turn rate 
+ if (car.speed != 0 && car.steer != 0) {
+ 
+  //Ackerman turn radius
+  turnRadius = Math.tan(-car.steer + halfpi) * car.halfwheelbase * 2;
+  
+  //convert speed to angular velocity
+  car.va = car.speed / turnRadius;
+  
+  dir += car.va;
+ } else {
+  car.va = 0;
+ } 
+
+ //new direction vector
+ var sn1 = Math.sin(dir);
+ var cs1 = Math.cos(dir);
+ 
+ //translate rotational center to rear axle
+ car.vx = cs0 * -car.halfwheelbase;
+ car.vy = sn0 * -car.halfwheelbase; 
+ car.vx += cs1 * car.speed;
+ car.vy += sn1 * car.speed; 
+ car.vx += cs1 * car.halfwheelbase;
+ car.vy += sn1 * car.halfwheelbase;
+ 
+ //move the car
+ car.x += car.vx;
+ car.y += car.vy;
+ car.a += car.va;
+}
+
+
+function render() {
+ ctx.fillText("Speed: " + Math.round(car.speed * fps) + " m/s", 50, 50);
+		
+ //body
+ drawRect(car.x,car.y,car.a,1,2);
+
+ //wheels
+ var s = Math.sin(car.a);
+ var c = Math.cos(car.a);
+ var cay = car.halfwheelbase * s + 0.9*c;
+ var cax = car.halfwheelbase * c - 0.9*s;
+ var cby = car.halfwheelbase * s - 0.9*c;
+ var cbx = car.halfwheelbase * c + 0.9*s;
+ drawRect(car.x+cax,car.y+cay,car.a+car.steer,0.1,0.3);
+ drawRect(car.x+cbx,car.y+cby,car.a+car.steer,0.1,0.3);
+ drawRect(car.x-cax,car.y-cay,car.a,0.1,0.3);
+ drawRect(car.x-cbx,car.y-cby,car.a,0.1,0.3);
+}
+
+function start() {
+ alert('Use keyboard arrows to control the car!');
+ update();
+ setInterval(update,50); //50ms=20fps
+}
+</script>
+</body></html>

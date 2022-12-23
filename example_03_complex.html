@@ -115,7 +115,7 @@ function physics() {
  pointvelY = car.va * wheelPosX + car.vy;
  slidevel = pointvelX * -sn1 + pointvelY * cs1;
  slideangle = Math.atan2(pointvelY, pointvelX);
- slipangle = dir + car.steer - slideangle;
+ slipangle = car.a + car.steer - slideangle;
  sidevel = slidevel * slidetable(slipangle) * 0.05;
  fx = -sn1 * -sidevel;
  fy = cs1 * -sidevel;
@@ -137,7 +137,7 @@ function physics() {
  } else {
     slidevel = pointvelX * -sn0 + pointvelY * cs0;
     slideangle = Math.atan2(pointvelY, pointvelX);
-    slipangle = dir - slideangle;
+    slipangle = car.a - slideangle;
     sidevel = slidevel * slidetable(slipangle) * 0.1;
     fx = -sn0 * -sidevel;
     fy = cs0 * -sidevel;
@@ -172,17 +172,17 @@ function slidetable(slipangle) {
  if (a > 1.570795) a = 3.14159 - a;
  var s;
 
- if      (a < 0.03488) s = 0.900
- else if (a < 0.17101) s = 1.000
- else if (a < 0.29389) s = 0.950
- else if (a < 0.34733) s = 0.900
- else if (a < 0.41452) s = 0.850
- else if (a < 0.48515) s = 0.750
- else if (a < 0.49970) s = 0.700
- else if (a < 0.49240) s = 0.650
- else if (a < 0.41452) s = 0.600
- else if (a < 0.23474) s = 0.550
- else s = 0.500;
+ if      (a < 0.078540) s = 0.75
+ else if (a < 0.157080) s = 1.00
+ else if (a < 0.235619) s = 0.90
+ else if (a < 0.314159) s = 0.85
+ else if (a < 0.392699) s = 0.80
+ else if (a < 0.471239) s = 0.75
+ else if (a < 0.549778) s = 0.70
+ else if (a < 0.628318) s = 0.65
+ else if (a < 0.706858) s = 0.60
+ else if (a < 0.785398) s = 0.55
+ else s = 0.50;
 
  return s;
 }
@@ -208,7 +208,7 @@ function render() {
 }
 
 function start() {
- alert('Use keyboard arrows to control the car!');
+ alert('Use keyboard arrows to control the car, spacebar to handbrake!');
  update();
  setInterval(update,50); //50ms=20fps
 }

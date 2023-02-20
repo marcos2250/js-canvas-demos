@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"/>
+<title>TNFS</title>
+<style>
+html, body { padding: 0px; margin: 0px; width: 100%; height: 100%; overflow: hidden;}
+canvas { width:100%; height:100%; border:1px solid black; }
+</style>
+</head>
+<body onload="start()">
+<canvas id="canvas"/>
+<script>
+var canvas = document.getElementById('canvas');
+canvas.height = window.innerHeight;
+canvas.width = window.innerWidth;
+var ctx = canvas.getContext('2d');
+var scale = 20; //pixels/meter
+var fps = 20;//50ms frames
+var halfWidth = window.innerWidth/2;
+var halfHeight = window.innerHeight/2
+
+const car = {
+   x: 0,
+   y: 0,
+   a: 0,
+   vx: 0,
+   vy: 0,
+   va: 0,
+   speed: 0,
+   steer: 0,
+   throttle: 0,
+   halfwheelbase: 1.4,
+   handbrake: false
+};
+
+car.x = window.innerWidth / scale / 4;
+car.y = window.innerHeight / scale / 2;
+
+window.addEventListener('pointermove', (e) => {
+    car.steer = e.clientX / window.innerWidth - 0.5;
+    car.throttle = e.clientY / window.innerHeight - 0.5;
+});
+
+document.addEventListener('keydown', function(event) {
+  if (event.keyCode == 38) {
+    car.throttle = 1;
+  } else if (event.keyCode == 40) {
+    car.throttle = -1;
+  } else if (event.keyCode == 37) {
+    car.steer = -0.5;
+  } else if (event.keyCode == 39) {
+    car.steer = 0.5;
+  } else if (event.keyCode == 32) {
+    car.handbrake = true;
+  }
+});
+
+document.addEventListener('keyup', function(event) {
+  if (event.keyCode == 38) {
+    car.throttle = 0;
+  } else if (event.keyCode == 40) {
+    car.throttle = 0;
+  } else if (event.keyCode == 37) {
+    car.steer = 0;
+  } else if (event.keyCode == 39) {
+    car.steer = 0;
+  } else if (event.keyCode == 32) {
+    car.handbrake = false;
+  }
+});
+
+function drawLine(x,y,a,b) {
+ ctx.beginPath();
+ ctx.moveTo(x*scale,y*scale);
+ ctx.lineTo(a*scale,b*scale);
+ ctx.stroke();
+}
+
+function drawRect(x,y,a,l,w) {
+ var s = Math.sin(a);
+ var c = Math.cos(a);
+ var cay = w*s + l*c;
+ var cax = w*c - l*s;
+ var cby = w*s - l*c;
+ var cbx = w*c + l*s;
+ ctx.beginPath();
+ ctx.moveTo((x+cax)*scale, (y+cay)*scale);
+ ctx.lineTo((x+cbx)*scale, (y+cby)*scale);
+ ctx.lineTo((x-cax)*scale, (y-cay)*scale);
+ ctx.lineTo((x-cbx)*scale, (y-cby)*scale);
+ ctx.lineTo((x+cax)*scale, (y+cay)*scale);
+ ctx.stroke();
+}
+
+function update() {
+ ctx.clearRect(0, 0, canvas.width, canvas.height);
+ render();
+ physics();
+}
+
+function physics() {
+
+ // convert to local
+ var sn0 = Math.sin(-car.a);
+ var cs0 = Math.cos(-car.a);
+ sLon = cs0 * car.vx - sn0 * car.vy;
+ sLat = sn0 * car.vx + cs0 * car.vy;
+ drag_lat = 0; drag_lon = 0;
+ dword435 = 0.5;
+ //sLon=0; sLat=0;
+
+ v3 = car.halfwheelbase * -car.va;
+
+ // front and rear forces
+ fLat = v3 + -(dword435 * sLat) - drag_lat / 2;
+ rLat = -(sLat - (dword435 * sLat)) - drag_lat / 2 - v3;
+ rLon = -(sLon - (dword435 * sLon)) - drag_lon / 2;
+ fLon = -(dword435 * sLon) - drag_lon / 2;
+
+ //tire forces
+ tf = calc_tire_forces(fLon,fLat, true);
+ f_F_Lon = tf.x; f_F_Lat = tf.y;
+ tf = calc_tire_forces(rLon,rLat, false);
+ f_R_Lon = tf.x; f_R_Lat = tf.y;
+
+ drawForces(f_F_Lon, f_F_Lat, +1);
+ drawForces(f_R_Lon, f_R_Lat, -1);
+
+ // update speeds
+ force_Lat = f_R_Lat + f_F_Lat;
+ force_Lon = f_R_Lon + f_F_Lon;
+ dword3D9 = 0; dword3E1 = 0;
+
+ sLat = (drag_lat + force_Lat + dword3D9);
+ sLon = (drag_lon + force_Lon + dword3E1);
+ 
+ // rotate back
+ sn0 = Math.sin(car.a);
+ cs0 = Math.cos(car.a);
+ car.vx += cs0 * sLon - sn0 * sLat;
+ car.vy += sn0 * sLon + cs0 * sLat;
+
+ car.va += f_F_Lat * car.halfwheelbase - f_R_Lat * car.halfwheelbase;
+
+ //move the car
+ car.x += car.vx;
+ car.y += car.vy;
+ car.a += car.va;
+ 
+ car.speed = Math.sqrt(car.vx*car.vx + car.vy*car.vy);
+}
+
+
+function calc_tire_forces(force_lon, force_lat, isFront) {
+ var sn1, cs1;
+ rlon = force_lon;
+ rlat = force_lat;
+
+ var max_grip = 0.4;
+ 
+ if (isFront) {
+   sn1 = Math.sin(-car.steer);
+   cs1 = Math.cos(-car.steer);
+   rlon = rlon * cs1 - rlat * sn1;
+   rlat = rlon * sn1 + rlat * cs1;
+ }
+
+ var flat, flon, ftotal, slipangle;
+ flat = Math.abs(rlat);
+ flon = Math.abs(rlon);
+ slipangle = Math.atan2(flat,flon);
+
+ if (!car.handbrake) {
+
+   // function 004 - read slidetable
+   ftire = slidetable(slipangle, isFront) * max_grip;
+   
+   //rlat = tire lateral grip force
+   rlat *= ftire;
+
+   //rlon = thrust - brake
+   if (isFront) {
+      rlon *= 0.001;
+   } else {
+      rlon = car.throttle/50;
+   }
+
+   //powerslide: rlat>>3 
+   if (!isFront && car.throttle > 0.4) {
+      rlat /= 8;
+   }
+   
+   // function 006 - grip limit
+   if (!isFront) {
+
+     //limit rlon to max grip
+     if (rlon > max_grip) rlon = max_grip;
+     if (rlon < -max_grip) rlon = -max_grip;
+ 
+     //and if low throttle, limit rlat to max grip
+     if (car.throttle <= 0.4) {
+       if (rlat > max_grip) rlat = max_grip;
+       if (rlat < -max_grip) rlat = -max_grip;
+     } else {
+       //reduces grip even more
+       rlat /= 2;
+     }
+   }
+ 
+ } else {
+   // locked wheels - hard brake or handbrake
+   if (isFront) {
+      rlat *= 0.3;
+      rlon *= 0.001;
+   } else {
+      rlat *= 0.05 * max_grip;
+      rlon *= 0.05 * max_grip;
+   }
+ }
+ 
+
+ if (isFront) {
+   sn1 = Math.sin(car.steer);
+   cs1 = Math.cos(car.steer);
+   rlon = rlon * cs1 - rlat * sn1;
+   rlat = rlon * sn1 + rlat * cs1;
+ }
+
+ return {x: rlon, y: rlat};
+}
+
+function slidetable(a, isFront) {
+ var s;
+
+ if (isFront) {
+   ctx.fillText("Slipangle F: " + Math.round(a * 56), 50, 80);
+   if      (a < 0.01) s = 0.02
+   else if (a < 0.35) s = 0.63
+   else if (a < 0.57) s = 0.87
+   else if (a < 1.21) s = 0.98
+   else if (a < 1.34) s = 1.00
+   else if (a < 1.42) s = 1.00
+   else if (a < 1.56) s = 0.93
+   else s = 0.77;
+   
+ } else { 
+   ctx.fillText("Slipangle R: " + Math.round(a * 56), 50, 100);
+   if      (a < 0.05) s = 0.97
+   else if (a < 0.35) s = 1.00
+   else if (a < 1.24) s = 0.99
+   else if (a < 1.46) s = 0.95
+   else if (a < 1.54) s = 0.84
+   else s = 0.46;
+ }
+ 
+ return s;
+}
+
+function drawForces(rlon,rlat,side) {
+ var fx,fy,wheelPosX,wheelPosY;
+ var sn1 = Math.sin(car.a);
+ var cs1 = Math.cos(car.a);
+
+ fx = rlon * cs1 - rlat * sn1;
+ fy = rlon * sn1 + rlat * cs1;
+
+ wheelPosX = car.halfwheelbase * cs1 * side;
+ wheelPosY = car.halfwheelbase * sn1 * side;
+ 
+ drawLine(car.x + wheelPosX, car.y + wheelPosY, car.x + wheelPosX + fx * 100,  car.y + wheelPosY + fy * 100); 
+}
+
+function render() {
+ ctx.fillText("Speed: " + Math.round(car.speed * fps) + " m/s", 50, 50);
+
+ //body
+ drawRect(car.x,car.y,car.a,1,2);
+
+ //wheels
+ var s = Math.sin(car.a);
+ var c = Math.cos(car.a);
+ var cay = car.halfwheelbase * s + 0.9*c;
+ var cax = car.halfwheelbase * c - 0.9*s;
+ var cby = car.halfwheelbase * s - 0.9*c;
+ var cbx = car.halfwheelbase * c + 0.9*s;
+ drawRect(car.x+cax,car.y+cay,car.a+car.steer,0.1,0.3);
+ drawRect(car.x+cbx,car.y+cby,car.a+car.steer,0.1,0.3);
+ drawRect(car.x-cax,car.y-cay,car.a,0.1,0.3);
+ drawRect(car.x-cbx,car.y-cby,car.a,0.1,0.3);
+}
+
+function start() {
+ alert('Use keyboard arrows to control the car!');
+ update();
+ setInterval(update,50); //50ms=20fps
+}
+</script>
+</body></html>

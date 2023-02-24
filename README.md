@@ -9,9 +9,10 @@ This is not intended to be a real physics full featured simulation!
 * Example 01 - Slipless, calculates low speed cornering trajectory using Ackerman turn rate;
 * Example 02 - Basic slip, minimal 2-wheel model with angular inertia and wheel slide drag;
 * Example 03 - Little more detailed tire slip forces using Pacejka-like lookup tables.
-* Example 04 - TNFS1-based 2-wheel physics model
 
 ### Bonus
+* example_driver_1999.html - Driver-based physics model
+* example_tnfs_1995.html - TNFS1-based physics model
 * tnfsdemo_1995_physics.c - Decompilation excerpt from TNFS1 (1995 MS-DOS demo)
 
 ### References

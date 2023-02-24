@@ -31,8 +31,8 @@ const car = {
    throttle: 0,
    halfwheelbase: 1.4,
    weight_dist: 0.5,
-   max_grip_front: 0.05,
-   max_grip_rear: 0.06,
+   max_grip_front: 0.03,
+   max_grip_rear: 0.03,
    handbrake: false
 };
 
@@ -215,8 +215,8 @@ function calc_tire_forces(force_lon, force_lat, isFront) {
  
  } else {
    // handbrake
-   rlat *= max_grip;
-   rlon *= max_grip;
+   rlat *= 0.01;
+   rlon *= 0.01;
  }
 
  // rotate back to car frame of reference
@@ -292,7 +292,7 @@ function render() {
 }
 
 function start() {
- alert('Use keyboard arrows to control the car!');
+ alert('Use keyboard arrows to control the car, spacebar to handbrake!');
  update();
  setInterval(update,50); //50ms=20fps
 }

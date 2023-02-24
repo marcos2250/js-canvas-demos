@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="utf-8"/>
-<title>Drifting Car</title>
+<title>Driver</title>
 <style>
 html, body { padding: 0px; margin: 0px; width: 100%; height: 100%; overflow: hidden;}
 canvas { width:100%; height:100%; border:1px solid black; }
@@ -30,7 +30,8 @@ const car = {
    steer: 0,
    throttle: 0,
    halfwheelbase: 1.4,
-   max_grip: 0.1,
+   halftrackwidth: 0.9,
+   max_grip: 0.03,
    handbrake: false
 };
 
@@ -108,56 +109,72 @@ function physics() {
  var dx, dy, da;
  var slidevel, sidevel, slideangle, slipangle;
  var pointvelX, pointvelY;
+ var wheel, isFront;
 
+ dx=0; dy=0; da=0;
+ 
+ for (wheel = 0; wheel <= 3; wheel++) { 
+   isFront = wheel % 2 == 0;
    
- //front wheels
- wheelPosX = car.halfwheelbase * cs0;
- wheelPosY = car.halfwheelbase * sn0;
- pointvelX = -car.va * wheelPosY + car.vx;
- pointvelY = car.va * wheelPosX + car.vy;
- slidevel = pointvelX * -sn1 + pointvelY * cs1;
- slideangle = Math.atan2(pointvelY, pointvelX);
- slipangle = car.a + car.steer - slideangle;
- sidevel = slidevel * slidetable(slipangle) * 0.1;
- fx = -sn1 * -sidevel;
- fy = cs1 * -sidevel;
- fa = fy * wheelPosX - fx * wheelPosY;
- dx=fx; dy=fy; da=fa;
+   switch (wheel) {
+   case 0:
+     wheelPosX = car.halfwheelbase * cs0 - car.halftrackwidth * sn0;
+     wheelPosY = car.halfwheelbase * sn0 + car.halftrackwidth * cs0;
+     break;
+   case 1:
+     wheelPosX = -car.halfwheelbase * cs0 - car.halftrackwidth * sn0;
+     wheelPosY = -car.halfwheelbase * sn0 + car.halftrackwidth * cs0;
+     break;
+   case 2:
+     wheelPosX = car.halfwheelbase * cs0 + car.halftrackwidth * sn0;
+     wheelPosY = car.halfwheelbase * sn0 - car.halftrackwidth * cs0;
+     break;
+   case 3:
+     wheelPosX = -car.halfwheelbase * cs0 + car.halftrackwidth * sn0;
+     wheelPosY = -car.halfwheelbase * sn0 - car.halftrackwidth * cs0;
+     break;
+   }
+   
+   pointvelX = -car.va * wheelPosY + car.vx;
+   pointvelY = car.va * wheelPosX + car.vy;
+   
+   if (isFront) {
+      slidevel = pointvelX * -sn1 + pointvelY * cs1;
+   } else {
+      slidevel = pointvelX * -sn0 + pointvelY * cs0;
+   }
+   
+   if (isFront) {
+      sidevel = slidevel * car.max_grip;
+      fx = -sn1 * -sidevel;
+      fy = cs1 * -sidevel;
+   } else {
+      if (car.handbrake) {
+         sidevel = slidevel * 0.01;
+         fx = 0;
+         fy = 0;
+      } else {
+         sidevel = slidevel * car.max_grip;
+         fx = cs0 * car.throttle/100;
+         fy = sn0 * car.throttle/100;
+      }
+      fx += -sn0 * -sidevel;
+      fy += cs0 * -sidevel;
+   }
 
- drawLine(car.x + wheelPosX, car.y + wheelPosY, car.x + wheelPosX + fx * 100,  car.y + wheelPosY + fy * 100);
+   fa = fy * wheelPosX - fx * wheelPosY;
+   dx+=fx; dy+=fy; da+=fa;
 
-
- //rear wheels
- wheelPosX = -car.halfwheelbase * cs0;
- wheelPosY = -car.halfwheelbase * sn0;
- pointvelX = -car.va * wheelPosY + car.vx;
- pointvelY = car.va * wheelPosX + car.vy;
-
- if (car.handbrake) {
-    fx = pointvelX * -0.02;
-    fy = pointvelY * -0.02;
- } else {
-    slidevel = pointvelX * -sn0 + pointvelY * cs0;
-    slideangle = Math.atan2(pointvelY, pointvelX);
-    slipangle = car.a - slideangle;
-    sidevel = slidevel * slidetable(slipangle) * 0.1;
-    fx = -sn0 * -sidevel;
-    fy = cs0 * -sidevel;
+   drawLine(car.x + wheelPosX, car.y + wheelPosY, car.x + wheelPosX + fx * 100,  car.y + wheelPosY + fy * 100);
  }
-
- fa = fy * wheelPosX - fx * wheelPosY;
- dx+=fx; dy+=fy; da+=fa;
-
- drawLine(car.x + wheelPosX, car.y + wheelPosY, car.x + wheelPosX + fx * 100,  car.y + wheelPosY + fy * 100); 
 
  car.vx += dx;
  car.vy += dy;
  car.va += da;
 
-
  //thrust 
- fx = cs0 * car.throttle;
- fy = sn0 * car.throttle;
+ fx = cs0 * car.throttle/100;
+ fy = sn0 * car.throttle/100;
  car.vx += fx/50;
  car.vy += fy/50;
 
@@ -168,6 +185,7 @@ function physics() {
  
  car.speed = Math.sqrt(car.vx*car.vx + car.vy*car.vy);
 }
+
 function slidetable(slipangle) {
  var a = Math.abs(slipangle) % 3.14159;
  if (a > 1.570795) a = 3.14159 - a;
@@ -198,10 +216,10 @@ function render() {
  //wheels
  var s = Math.sin(car.a);
  var c = Math.cos(car.a);
- var cay = car.halfwheelbase * s + 0.9*c;
- var cax = car.halfwheelbase * c - 0.9*s;
- var cby = car.halfwheelbase * s - 0.9*c;
- var cbx = car.halfwheelbase * c + 0.9*s;
+ var cay = car.halfwheelbase * s + car.halftrackwidth * c;
+ var cax = car.halfwheelbase * c - car.halftrackwidth * s;
+ var cby = car.halfwheelbase * s - car.halftrackwidth * c;
+ var cbx = car.halfwheelbase * c + car.halftrackwidth * s;
  drawRect(car.x+cax,car.y+cay,car.a+car.steer,0.1,0.3);
  drawRect(car.x+cbx,car.y+cby,car.a+car.steer,0.1,0.3);
  drawRect(car.x-cax,car.y-cay,car.a,0.1,0.3);

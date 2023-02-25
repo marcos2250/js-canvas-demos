@@ -96,6 +96,11 @@ function update() {
 }
 
 function physics() {
+ var fx, fy, fa;
+ var dx, dy, da;
+ var slidevel, sidevel, slideangle, slipangle;
+ var pointvelX, pointvelY;
+ var wheel, isFront;
 
  var dir = car.a;
  var sn0 = Math.sin(dir);
@@ -104,12 +109,6 @@ function physics() {
  dir += car.steer;
  var sn1 = Math.sin(dir);
  var cs1 = Math.cos(dir); 
-
- var fx, fy, fa;
- var dx, dy, da;
- var slidevel, sidevel, slideangle, slipangle;
- var pointvelX, pointvelY;
- var wheel, isFront;
 
  dx=0; dy=0; da=0;
  
@@ -140,21 +139,18 @@ function physics() {
    
    if (isFront) {
       slidevel = pointvelX * -sn1 + pointvelY * cs1;
-   } else {
-      slidevel = pointvelX * -sn0 + pointvelY * cs0;
-   }
-   
-   if (isFront) {
       sidevel = slidevel * car.max_grip;
       fx = -sn1 * -sidevel;
       fy = cs1 * -sidevel;
    } else {
+      slidevel = pointvelX * -sn0 + pointvelY * cs0;
       if (car.handbrake) {
          sidevel = slidevel * 0.01;
          fx = 0;
          fy = 0;
       } else {
-         sidevel = slidevel * car.max_grip;
+         sidevel = slidevel * car.max_grip;         
+         // thrust
          fx = cs0 * car.throttle/100;
          fy = sn0 * car.throttle/100;
       }
@@ -172,38 +168,12 @@ function physics() {
  car.vy += dy;
  car.va += da;
 
- //thrust 
- fx = cs0 * car.throttle/100;
- fy = sn0 * car.throttle/100;
- car.vx += fx/50;
- car.vy += fy/50;
-
  //move the car
  car.x += car.vx;
  car.y += car.vy;
  car.a += car.va;
  
  car.speed = Math.sqrt(car.vx*car.vx + car.vy*car.vy);
-}
-
-function slidetable(slipangle) {
- var a = Math.abs(slipangle) % 3.14159;
- if (a > 1.570795) a = 3.14159 - a;
- var s;
-
- if      (a < 0.078540) s = 0.75
- else if (a < 0.157080) s = 1.00
- else if (a < 0.235619) s = 0.95
- else if (a < 0.314159) s = 0.95
- else if (a < 0.392699) s = 0.90
- else if (a < 0.471239) s = 0.90
- else if (a < 0.549778) s = 0.85
- else if (a < 0.628318) s = 0.85
- else if (a < 0.706858) s = 0.80
- else if (a < 0.785398) s = 0.80
- else s = 0.75;
-
- return s;
 }
 
 

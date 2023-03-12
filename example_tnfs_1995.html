@@ -29,10 +29,13 @@ const car = {
    speed: 0,
    steer: 0,
    throttle: 0,
-   halfwheelbase: 1.4,
+   brake: 0,
+   wheelbase: 2.5,
+   halfwheelbase: 1.25,
    weight_dist: 0.5,
-   max_grip_front: 0.03,
-   max_grip_rear: 0.03,
+   front_drive: 0,
+   max_grip_front: 0.04,
+   max_grip_rear: 0.04,
    handbrake: false
 };
 
@@ -48,7 +51,7 @@ document.addEventListener('keydown', function(event) {
   if (event.keyCode == 38) {
     car.throttle = 1;
   } else if (event.keyCode == 40) {
-    car.throttle = -1;
+    car.brake = 1;
   } else if (event.keyCode == 37) {
     car.steer = -0.5;
   } else if (event.keyCode == 39) {
@@ -62,7 +65,7 @@ document.addEventListener('keyup', function(event) {
   if (event.keyCode == 38) {
     car.throttle = 0;
   } else if (event.keyCode == 40) {
-    car.throttle = 0;
+    car.brake = 0;
   } else if (event.keyCode == 37) {
     car.steer = 0;
   } else if (event.keyCode == 39) {
@@ -103,6 +106,12 @@ function update() {
 
 function physics() {
 
+ // thrust force
+ var thrust = car.throttle/50;
+ var traction_front =  thrust * car.front_drive;
+ var traction_rear  =  thrust - traction_front;
+ var brake = car.brake/100;
+ 
  // convert to local
  var sn0 = Math.sin(-car.a);
  var cs0 = Math.cos(-car.a);
@@ -113,16 +122,16 @@ function physics() {
  drag_lat = 0; drag_lon = 0;
 
  // front and rear forces
- v3 = car.halfwheelbase * -car.va / 2;
+ v3 = -car.va * car.halfwheelbase;
  fLat = v3 + -(car.weight_dist * sLat) - drag_lat / 2;
  rLat = -(sLat - (car.weight_dist * sLat)) - drag_lat / 2 - v3;
  rLon = -(sLon - (car.weight_dist * sLon)) - drag_lon / 2;
  fLon = -(car.weight_dist * sLon) - drag_lon / 2;
 
  //tire forces
- tf = calc_tire_forces(fLon,fLat, true);
+ tf = calc_tire_forces(fLon, fLat, traction_front, brake, true);
  f_F_Lon = tf.x; f_F_Lat = tf.y;
- tf = calc_tire_forces(rLon,rLat, false);
+ tf = calc_tire_forces(rLon, rLat, traction_rear, brake, false);
  f_R_Lon = tf.x; f_R_Lat = tf.y;
 
  //illustrate forces on screen
@@ -144,7 +153,7 @@ function physics() {
  car.vy += sn0 * sLon + cs0 * sLat;
 
  // body rotation torque
- car.va += f_F_Lat / car.halfwheelbase - f_R_Lat / car.halfwheelbase;
+ car.va += f_F_Lat / car.wheelbase - f_R_Lat / car.wheelbase;
  
  //move the car
  car.x += car.vx;
@@ -155,7 +164,7 @@ function physics() {
 }
 
 
-function calc_tire_forces(force_lon, force_lat, isFront) {
+function calc_tire_forces(force_lon, force_lat, force_thrust, force_brake, isFront) {
  var sn1, cs1;
  rlon = force_lon;
  rlat = force_lat;
@@ -180,43 +189,34 @@ function calc_tire_forces(force_lon, force_lat, isFront) {
  flon = Math.abs(rlon);
  slipangle = Math.atan2(flat,flon);
 
- if (isFront || !car.handbrake) {
-
-   // function 004 - read slidetable
-   var ftire = slidetable(slipangle, isFront);
-   ftire *= max_grip;
+ // get slide grip table
+ var ftire = slidetable(slipangle, isFront);
+ ftire *= max_grip;
+  
+ // tire lateral grip force
+ if (rlat > ftire) rlat = ftire;
+ if (rlat < -ftire) rlat = -ftire;
    
-   //rlat = tire lateral grip force
-   if (rlat > ftire) rlat = ftire;
-   if (rlat < -ftire) rlat = -ftire;
-   
-   //rlon = thrust - brake
-   if (isFront) {
-      rlon *= 0.0001;
-   } else {
-      rlon = car.throttle/50;
-   }
+ // traction thrust - brake   
+ rlon = force_thrust - force_brake;
 
-   // function 006 - grip limits
-   //limit rlon to max grip
-   if (rlon > max_grip) rlon = max_grip;
-   if (rlon < -max_grip) rlon = -max_grip;
+ // grip limits   
+ if (rlon > max_grip) rlon = max_grip;
+ if (rlon < -max_grip) rlon = -max_grip;  
 
-   if (!isFront) {
-     //low speed cornering, limit rlat to max grip
-     if (car.throttle <= 0.4) {
-        if (rlat > max_grip) rlat = max_grip;
-        if (rlat < -max_grip) rlat = -max_grip;
-     } else {
-        //reduces grip even more
-        rlat /= 4;
-     }
-   }
+ // limit rlat to max grip
+ if (rlat > max_grip) rlat = max_grip;
+ if (rlat < -max_grip) rlat = -max_grip; 
+
+ // powerslide  
+ if (force_thrust > 0.001) {
+   rlat /= 8;
+ } 
  
- } else {
-   // handbrake
-   rlat *= 0.01;
-   rlon *= 0.01;
+ // handbrake
+ if (car.handbrake && !isFront) {
+   rlat /= 4;
+   rlon /= 4;
  }
 
  // rotate back to car frame of reference
@@ -235,7 +235,6 @@ function slidetable(a, isFront) {
  var s;
 
  if (isFront) {
-   ctx.fillText("Slipangle F: " + Math.round(a * 56), 50, 80);
    if      (a < 0.01) s = 0.02
    else if (a < 0.35) s = 0.63
    else if (a < 0.57) s = 0.87
@@ -246,7 +245,6 @@ function slidetable(a, isFront) {
    else s = 0.77;
    
  } else { 
-   ctx.fillText("Slipangle R: " + Math.round(a * 56), 50, 100);
    if      (a < 0.05) s = 0.97
    else if (a < 0.35) s = 1.00
    else if (a < 1.24) s = 0.99

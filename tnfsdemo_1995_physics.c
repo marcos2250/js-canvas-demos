@@ -119,8 +119,8 @@ struct tnfs_car_data {
 	struct tnfs_car_specs *car_specs_ptr; //00000471
 	int dword475; //00000475
 	// ...
-	int gv_throttle_ctrl; //00000491
-	int gv_brake_ctrl; //00000495
+	int ctrl_throttle; //00000491
+	int ctrl_brake; //00000495
 	int gap499; //00000499
 	int surface_type; //0000049D
 	// ...
@@ -151,16 +151,25 @@ int math_mul(int a, int b) {
 int math_sin(int input) {
 	int a = (input < 0 ? -input : input) % 262143; //360
 	int v = a % 0x10000; //fake sin "curve"
-	if (a > 196607) return v - 0x10000; //>270
-	if (a > 131071) return -v; //>180
-	if (a >  65535) return 0x10000 - v; //>90
-	return v; //<90
+	if (a > 196607) v =  v - 0x10000; //>270
+	else if (a > 131071) v =  -v; //>180
+	else if (a >  65535) v =  0x10000 - v; //>90
+	if (input < 0) return -v;
+	return v;
 }
 int math_cos(int a) {
 	return math_sin(a + 65535);
 }
-int math_atan2(int x, int y) {
-	return 0; //stub
+int math_atan2(int x, int y) { //really low precision atan2
+	if (x > 0) {
+		if (y > 0) return 0x1FFFFE; //45
+		if (y < 0) return -0x1FFFFE; //-45
+	}
+	if (x < 0) {
+		if (y > 0) return 0x5FFFFA; //135
+		if (y < 0) return -0x5FFFFA; //-135
+	}
+	return 0;
 }
 void math_rotate_2d(int x1, int y1, int angle, int *x2, int *y2) {
 	int sin = math_sin(angle >> 6);
@@ -237,7 +246,7 @@ void tnfs_physics_handbrake_2(int *force_lat, int *force_lon, signed int max_gri
 	}
 }
 
-void tnfs_road_surface_roughness(struct tnfs_car_data *car_data) {
+void tnfs_road_surface_modifier(struct tnfs_car_data *car_data) {
 	int v4;
 	int v5;
 	signed int v7;
@@ -287,23 +296,41 @@ void tnfs_road_surface_roughness(struct tnfs_car_data *car_data) {
  read grip table for a given slip angle
  offset 884, table size 2 x 512 bytes
 
- values for all front engine RWD cars
+ front engine RWD cars
  off	fr	rr
- 000	2	124
- 116	80	128
- 188	111
- 237	126
- 396		127
- 397	128
- 406		127
- 437	128
- 442		121
- 463	119
- 476		115
- 491		111
- 503		108
- 510	98	59
- 512
+ 000	2	174
+ 010	14	174
+ 020	26	174
+ 030	37	174
+ 040	51	175
+ 050	65	176
+ 060	101	177
+ 070	111	177
+ 080	120	200
+ 090	126	200
+ 0a0	140	200
+ 0b0	150	200
+ 0c0	160	177
+ 0d0	165	177
+ 0e0	174	177
+ 0f0	176	177
+ 100	176	177
+ 110	176	177
+ 120	176	177
+ 130	176	177
+ 140	176	177
+ 150	176	177
+ 160	177	177
+ 170	177	177
+ 180	177	177
+ 190	200	200
+ 1a0	200	176
+ 1b0	200	173
+ 1c0	174	170
+ 1d0	167	165
+ 1e0	161	162
+ 1f0	152	156
+ 200	142	153
  */
 int tnfs_tire_slide_table(struct tnfs_car_data *a1, signed int slip_angle, int is_rear_wheels) {
 	signed int v4;
@@ -377,7 +404,7 @@ void tnfs_tire_limit_max_grip(struct tnfs_car_data *car_data, //
 
 		v11 = v9 / fix8(f_total);
 
-		if ((car_data->brake <= 150 || *&car_data->gv_brake_ctrl) && car_data->handbrake == 0) {
+		if ((car_data->brake <= 150 || *&car_data->ctrl_brake) && car_data->handbrake == 0) {
 			// not locked wheels
 			if (*force_lat > max_grip)
 				*force_lat = max_grip;
@@ -438,7 +465,7 @@ void tnfs_tire_forces(struct tnfs_car_data *_car_data, //
 	struct tnfs_car_specs *car_specs;
 
 	car_data = _car_data;
-	car_specs = &car_data->car_specs_ptr;
+	car_specs = car_data->car_specs_ptr;
 
 	v34 = 0;
 	if (*&_car_data->gap3F9[4] == 0) {
@@ -473,7 +500,7 @@ void tnfs_tire_forces(struct tnfs_car_data *_car_data, //
 		*skid |= 1u;
 	}
 
-	if ( fix2(5 * max_grip) >= abs(braking_force) || (*&car_data->gv_brake_ctrl != 0 && car_data->handbrake == 0)) {
+	if ( fix2(5 * max_grip) >= abs(braking_force) || (*&car_data->ctrl_brake != 0 && car_data->handbrake == 0)) {
 		// not locked wheels
 
 		// lateral tire grip factor
@@ -520,7 +547,7 @@ void tnfs_tire_forces(struct tnfs_car_data *_car_data, //
 			f_lat_loc_abs2 = abs(force_lat_local);
 			if (f_lat_loc_abs2 + f_lon_loc_abs2 > max_grip) {
 				*skid = 2;
-				if (f_lon_loc_abs2 > max_grip && dword_D8AE4 && !*&car_data->gv_throttle_ctrl) {
+				if (f_lon_loc_abs2 > max_grip && dword_D8AE4 && !*&car_data->ctrl_throttle) {
 					force_lat_local = fix2(force_lat_local);
 				}
 			}
@@ -531,8 +558,6 @@ void tnfs_tire_forces(struct tnfs_car_data *_car_data, //
 			if (*slide < v34) {
 				*slide = v34;
 			}
-
-			force_lat_local = -v38;
 
 		} else {
 			//deceleration
@@ -638,7 +663,7 @@ void tnfs_physics_main(struct tnfs_car_data *a1) {
 	v51 = &unknown_collision_array;
 
 	dword_D8AE4 = 0;
-	car_specs = (struct tnfs_car_specs*) a1->car_specs_ptr;
+	car_specs = a1->car_specs_ptr;
 
 	// fast vec2 length
 	v44 = abs(a1->speed_x);
@@ -666,8 +691,8 @@ void tnfs_physics_main(struct tnfs_car_data *a1) {
 
 	// throttle and brake controller inputs
 	if ((dword_122C20 & 0x10) != 0 && a1->handbrake == 0) {
-		a1->is_brake_pressed = *&a1->gv_brake_ctrl;
-		a1->is_throttle_pressed = *&a1->gv_throttle_ctrl;
+		a1->is_brake_pressed = *&a1->ctrl_brake;
+		a1->is_throttle_pressed = *&a1->ctrl_throttle;
 	} else {
 		a1->is_brake_pressed = 0;
 		a1->is_throttle_pressed = 0;
@@ -869,7 +894,7 @@ void tnfs_physics_main(struct tnfs_car_data *a1) {
 	v7 = (v5 + car_data->rear_friction_factor) * road_surface_type_array[4 * car_data->surface_type];
 	car_data->tire_grip_rear = fix8(v7);
 
-	tnfs_road_surface_roughness(car_data);
+	tnfs_road_surface_modifier(car_data);
 
 	// thrust force to acc (force/mass=acc?)
 	v8 = car_specs->thrust_to_acc_factor * force_Lon;
@@ -1094,12 +1119,14 @@ int main(int argc, char **argv) {
 	car_data.gear_speed_selected = 1;
 	car_data.throttle = 60;
 	car_data.is_throttle_pressed = 1;
-	car_data.gv_throttle_ctrl = 1;
+	car_data.ctrl_throttle = 1;
 	car_data.brake = 0;
 	car_data.is_brake_pressed = 0;
-	car_data.gv_brake_ctrl = 0;
+	car_data.ctrl_brake = 0;
 	car_data.gap3F9[4] = 1; //???
 	car_data.surface_type = 0;
+	car_data.tire_grip_front = 0xe469a;
+	car_data.tire_grip_rear = 0xd10de;
 	car_data.dword3D9 = 0;
 	car_data.dword3E1 = 0;
 
@@ -1117,7 +1144,7 @@ int main(int argc, char **argv) {
 	car_data.speed_drivetrain = 10000;
 	car_data.speed_local_lon = 10000;
 	car_data.speed_local_lat = 0;
-	car_data.steer_angle = 0; //int32 -1769472 to +1769472
+	car_data.steer_angle = -1769472; //int32 -1769472 to +1769472
 	car_data.road_segment_a = 0;
 	car_data.road_segment_b = 0;
 	car_data.game_status = 1;

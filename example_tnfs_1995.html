@@ -118,33 +118,26 @@ function physics() {
  sLon = cs0 * car.vx - sn0 * car.vy;
  sLat = sn0 * car.vx + cs0 * car.vy;
  
- //wont include drag forces
- drag_lat = 0; drag_lon = 0;
+ // front and rear inertia, inverted
+ v3 = car.va * car.halfwheelbase;
+ fLat = -((car.weight_dist * sLat) + v3);
+ rLat = -(sLat - (car.weight_dist * sLat) - v3);
+ rLon = -(sLon - (car.weight_dist * sLon));
+ fLon = -(car.weight_dist * sLon);
 
- // front and rear forces
- v3 = -car.va * car.halfwheelbase;
- fLat = v3 + -(car.weight_dist * sLat) - drag_lat / 2;
- rLat = -(sLat - (car.weight_dist * sLat)) - drag_lat / 2 - v3;
- rLon = -(sLon - (car.weight_dist * sLon)) - drag_lon / 2;
- fLon = -(car.weight_dist * sLon) - drag_lon / 2;
-
- //tire forces
+ // tire forces
  tf = calc_tire_forces(fLon, fLat, traction_front, brake, true);
  f_F_Lon = tf.x; f_F_Lat = tf.y;
  tf = calc_tire_forces(rLon, rLat, traction_rear, brake, false);
  f_R_Lon = tf.x; f_R_Lat = tf.y;
 
- //illustrate forces on screen
+ // illustrate forces on screen
  drawForces(f_F_Lon, f_F_Lat, +1);
  drawForces(f_R_Lon, f_R_Lat, -1);
 
- // update speeds
- force_Lat = f_R_Lat + f_F_Lat;
- force_Lon = f_R_Lon + f_F_Lon;
- dword3D9 = 0; dword3E1 = 0;
-
- sLat = (drag_lat + force_Lat + dword3D9);
- sLon = (drag_lon + force_Lon + dword3E1);
+ // update speeds 
+ sLat = f_R_Lat + f_F_Lat;
+ sLon = f_R_Lon + f_F_Lon;
  
  // rotate back to world coordinates
  sn0 = Math.sin(car.a);
@@ -166,9 +159,8 @@ function physics() {
 
 function calc_tire_forces(force_lon, force_lat, force_thrust, force_brake, isFront) {
  var sn1, cs1;
- rlon = force_lon;
- rlat = force_lat;
-
+ var flat, flon, slipangle;
+ 
  var max_grip;
  if (isFront) {
    max_grip = car.max_grip_front;
@@ -180,51 +172,52 @@ function calc_tire_forces(force_lon, force_lat, force_thrust, force_brake, isFro
  if (isFront) {
    sn1 = Math.sin(-car.steer);
    cs1 = Math.cos(-car.steer);
-   rlon = rlon * cs1 - rlat * sn1;
-   rlat = rlon * sn1 + rlat * cs1;
+   flon = cs1 * force_lon - sn1 * force_lat;
+   flat = sn1 * force_lon + cs1 * force_lat;
+ } else {
+   flon = force_lon;
+   flat = force_lat;
  }
 
- var flat, flon, slipangle;
- flat = Math.abs(rlat);
- flon = Math.abs(rlon);
- slipangle = Math.atan2(flat,flon);
+ slipangle = Math.atan2(Math.abs(flat),Math.abs(flon));
 
  // get slide grip table
  var ftire = slidetable(slipangle, isFront);
  ftire *= max_grip;
   
  // tire lateral grip force
- if (rlat > ftire) rlat = ftire;
- if (rlat < -ftire) rlat = -ftire;
+ if (flat > ftire) flat = ftire;
+ if (flat < -ftire) flat = -ftire;
    
- // traction thrust - brake   
- rlon = force_thrust - force_brake;
-
- // grip limits   
- if (rlon > max_grip) rlon = max_grip;
- if (rlon < -max_grip) rlon = -max_grip;  
-
- // limit rlat to max grip
- if (rlat > max_grip) rlat = max_grip;
- if (rlat < -max_grip) rlat = -max_grip; 
+ // traction/thrust vs brake
+ flon = force_thrust - force_brake;
+ 
+ // grip limits
+ if (flon > max_grip)  flon = max_grip;
+ if (flon < -max_grip) flon = -max_grip;  
+ if (flat > max_grip)  flat = max_grip;
+ if (flat < -max_grip) flat = -max_grip; 
 
  // powerslide  
  if (force_thrust > 0.001) {
-   rlat /= 8;
+   flat /= 8;
  } 
  
  // handbrake
  if (car.handbrake && !isFront) {
-   rlat /= 4;
-   rlon /= 4;
+   flat /= 4;
+   flon /= 4;
  }
 
  // rotate back to car frame of reference
  if (isFront) {
    sn1 = Math.sin(car.steer);
    cs1 = Math.cos(car.steer);
-   rlon = rlon * cs1 - rlat * sn1;
-   rlat = rlon * sn1 + rlat * cs1;
+   rlon = cs1 * flon - sn1 * flat;
+   rlat = sn1 * flon + cs1 * flat;
+ } else {
+   rlon = flon;
+   rlat = flat;
  }
  
  return {x: rlon, y: rlat};
@@ -256,17 +249,14 @@ function slidetable(a, isFront) {
  return s;
 }
 
-function drawForces(rlon,rlat,side) {
+function drawForces(force_lon , force_lat, side) {
  var fx,fy,wheelPosX,wheelPosY;
  var sn1 = Math.sin(car.a);
  var cs1 = Math.cos(car.a);
-
- fx = rlon * cs1 - rlat * sn1;
- fy = rlon * sn1 + rlat * cs1;
-
+ fx = cs1 * force_lon - sn1 * force_lat;
+ fy = sn1 * force_lon + cs1 * force_lat;
  wheelPosX = car.halfwheelbase * cs1 * side;
  wheelPosY = car.halfwheelbase * sn1 * side;
- 
  drawLine(car.x + wheelPosX, car.y + wheelPosY, car.x + wheelPosX + fx * 100,  car.y + wheelPosY + fy * 100); 
 }
 

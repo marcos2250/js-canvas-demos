@@ -13,7 +13,6 @@ This is not intended to be a real physics full featured simulation!
 ### Bonus
 * example_driver_1999.html - Driver-based physics model
 * example_tnfs_1995.html - TNFS1-based physics model
-* tnfsdemo_1995_physics.c - Decompilation excerpt from TNFS1 (1995 MS-DOS demo)
 
 ### References
 * https://asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html

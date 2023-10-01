@@ -41,28 +41,28 @@ class RigidBody {
   var pointX,pointY;
   var normalX,normalY;
   var snA,csA,snD,csD;
-  var dot,dist;
+  var dot,dist,aux;
 
-  normalX = Math.sin(pA);
-  normalY = Math.cos(pA);
+  normalX = Math.sin(pA); //left=-1 right=+1
+  normalY = -Math.cos(pA); //up=-1 down=+1
  
   snA = Math.sin(this.a);
   csA = Math.cos(this.a);
   snD = Math.sin(this.a - pA);
   csD = Math.cos(this.a - pA);
 
-  // nearest side sign (+/-)
+  // nearest nonzero side sign (+/-)
   sx=-1; sy=-1;
   if (snD > 0) sx = 1;
   if (csD > 0) sy = 1;
 
   // dist to surface
-  dist = (pY-this.y)*normalY - (pX-this.x)*normalX
+  dist = (pY-this.y)*-normalY - (pX-this.x)*normalX
          -snD*this.h*sx -csD*this.w*sy;
 
   // collision detected
   if (dist < 0) {
-   this.y += dist*normalY;
+   this.y -= dist*normalY;
    this.x -= dist*normalX;
  
    // contact point
@@ -72,24 +72,26 @@ class RigidBody {
 
    // point speed
    vx = this.vx - (this.va*pointY*normalX);
-   vy = this.vy + (this.va*pointX*normalY);
+   vy = this.vy - (this.va*pointX*normalY);
 
    // check if vector is opposite to normal
-   dot = -vy * normalY + vx * normalX;
+   dot = vx * normalX + vy * normalY;
    if (dot < 0) {
 
-    // reflect speed vector around normal
-    sx = vx * normalY + vy * normalX;
-    sy = -vx * normalX + vy * normalY;
-    sx *= 0.3; sy *= -0.3;
-    this.vx = sx * normalY - sy * normalX;
-    this.vy = sx * normalX + sy * normalY;
-
+    // reflect speed vector over normal
+    aux = 2 * dot;
+    this.vx = vx - (normalX * aux);
+    this.vy = vy - (normalY * aux);
+                
+    // dampen impact
+    this.vx *= 0.3;        
+    this.vy *= 0.3;  
+        
     // illustrate force on screen
     drawLineR(pointX+this.x, pointY+this.y, this.vx*40, this.vy*40);
 
     // apply body torque
-    this.va += (pointX*normalY + pointY*normalX) * sy /10;
+    this.va += (pointY*normalX - pointX*normalY) * dot / 30;
  
     // angular speed limit
     if (this.va > 0.1) this.va = 0.1;
